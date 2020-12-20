@@ -4,11 +4,12 @@ import androidx.hilt.lifecycle.ViewModelInject
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.homan.huang.bletoled.common.SEC
 import com.homan.huang.bletoled.common.lgd
 import com.homan.huang.bletoled.device.BluetoothHelper
 import com.homan.huang.bletoled.device.DeviceStatus
 import com.homan.huang.bletoled.device.DeviceStatus.*
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 
 
 class MainViewModel @ViewModelInject constructor(
@@ -19,10 +20,10 @@ class MainViewModel @ViewModelInject constructor(
 
     fun checkBondedList() {
         if (bleHelper.checkBondedList()) {
-            lgd("$tag Found. Move to Step 3, Bonding.")
+            lgd("$tag Found. Move to Step 4, Bonding.")
             deviceStatus.postValue(BONDING)
         } else {
-            lgd("$tag Not Found. Move to Step 2, Discovering.")
+            lgd("$tag Not Found. Move to Step 3, Discovering.")
             deviceStatus.postValue(DISCOVERING)
         }
     }
@@ -55,11 +56,29 @@ class MainViewModel @ViewModelInject constructor(
     }
 
     fun turnOn() {
-        bleHelper.switch("101")
+        bleHelper.ledSwitch("101")
     }
 
     fun turnOff() {
-        bleHelper.switch("011")
+        bleHelper.ledSwitch("011")
+    }
+
+    fun checkNewDevice() {
+        // new password entry timeout is 40s
+        viewModelScope.launch {
+            repeat(40) {
+                deviceStatus.postValue(COUNT_DOWN)
+                delay(SEC)
+            }
+            if (!bleHelper.checkBondedList()) {
+                lgd("Check Bonded List.")
+                deviceStatus.postValue(FAIL)
+            }
+        }
+    }
+
+    fun connected() {
+        deviceStatus.postValue(CONNECTED)
     }
 }
 

@@ -10,6 +10,7 @@
         android:id="@+id/infoTV"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:gravity="center"
         android:text="Hello World!"
         android:textColor="@color/purple_500"
         android:textSize="24sp"
@@ -65,5 +66,29 @@
         android:text="Off"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/infoTV" />
+
+    <Button
+        android:id="@+id/tryAgainBT"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="220dp"
+        android:backgroundTint="@android:color/holo_orange_light"
+        android:text="Try Again"
+        android:textColor="@android:color/holo_green_dark"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/infoTV" />
+
+    <TextView
+        android:id="@+id/counterTV"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="TextView"
+        android:textColor="@color/teal_700"
+        android:textSize="18sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

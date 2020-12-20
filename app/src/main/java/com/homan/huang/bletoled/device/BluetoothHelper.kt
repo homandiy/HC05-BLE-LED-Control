@@ -35,46 +35,75 @@ class BluetoothHelper @Inject constructor(
     private var mHandler: Handler? = null
     private var mConnectedThread: ConnectedThread? = null
 
-    // server vars
-    private var clientAddress: String = ""
-    private var clientDevice: BluetoothDevice? = null
-    private var clientSocket: BluetoothSocket? = null
-
     // check bluetooth switch
     fun isSwitchOn(): Boolean {
         return !bluetoothAdapter.isEnabled
     }
 
-    private val channel = Channel<String>() // Coroutines
-    private val connectCallback = object : BluetoothGattCallback() {
-        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            val deviceAddress = gatt.device.address
 
-            lgd("$tag $deviceAddress ==> status: $status")
+    // Step 4
+    fun checkDeviceBonding(): Boolean {
+        val uuids = mBleDevice.uuids
+        serviceUuid = uuids[0].uuid
+        charUuid = uuids[1].uuid
 
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    lgd("connectCallback: Successfully connected to $deviceAddress")
-                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    lgd("connectCallback: Successfully disconnected from $deviceAddress")
-                    gatt.close()
-                }
-            } else {
-                lge("connectCallback: Error $status encountered for " +
-                        "$deviceAddress! Disconnecting...")
-                gatt.close()
-            }
+        // handler:
+        if (mHandler == null) mHandler = newHandler
+        bondThread.start()
+
+        lgd("$tag Service UUID: $serviceUuid")
+        lgd("$tag Characteristic UUID: $charUuid")
+
+
+
+        return true
+    }
+    //endregion
+
+    // Step 3
+    fun discoverDevice() {
+        val mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+        if (mBluetoothAdapter.isDiscovering){
+            lgd(tag + "Canceling discovery process...")
+            bluetoothAdapter.cancelDiscovery()
         }
 
-        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                lgd("ACTION_GATT_SERVICES_DISCOVERED")
-            } else {
-                lgd("onServicesDiscovered received: $status")
-            }
-        }
+        lgd(tag + "Start Discovery...")
+        mBluetoothAdapter.startDiscovery()
     }
 
+    //region Step 2: Check Paired List
+    fun checkBondedList(): Boolean {
+        val devices = bluetoothAdapter?.bondedDevices
+        val list = ArrayList<Any>()
+        // address to string
+        val hcAddr = mRegex.replace(devAddr, "").toUpperCase()
+
+        if (devices?.size!! > 0) {
+            // Loop through paired devices
+            for (device in devices) {
+                // address to string
+                val deviceAddr = mRegex.replace(
+                        device.address, ""
+                ).toUpperCase(Locale.ROOT)
+                lgd("$tag Device address: $deviceAddr vs $hcAddr")
+
+                if (deviceAddr == hcAddr) {
+                    lgd("$tag ==========> Found HC05")
+                    mBleDevice = device
+                    return true
+                } else {
+                    lgd("$tag ! Not Found !")
+                }
+            }
+        } else {
+            lgd("$tag Nothing is in the paired list.")
+        }
+        return false
+    }
+    //endregion
+
+    //region network thread with Bluetooth
     private val bondThread = object : Thread() {
         override fun run() {
             var fail = false
@@ -108,109 +137,6 @@ class BluetoothHelper @Inject constructor(
         }
     }
 
-    // Step 3
-    fun checkDeviceBonding(): Boolean {
-        val uuids = mBleDevice.uuids
-        serviceUuid = uuids[0].uuid
-        charUuid = uuids[1].uuid
-
-        val state = getBondState(mBleDevice.bondState)
-        lgd("$tag +++++++++++++++++++++ bond state: $state")
-        //mBleDevice.createBond()
-
-        if (mHandler == null) mHandler = newHandler
-        bondThread.start()
-
-        lgd("$tag Service UUID: $serviceUuid")
-        lgd("$tag Characteristic UUID: $charUuid")
-
-        val gatt = mBleDevice.connectGatt(
-                context,
-                false,
-                connectCallback,
-                TRANSPORT_LE)
-        var result = false
-        result = gatt.connect()
-        gatt.disconnect()
-        gatt.close()
-
-        return result
-    }
-    //endregion
-
-    private val serviceCallback = object : BluetoothGattCallback() {
-        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            val deviceAddress = gatt.device.address
-
-            lgd("$tag status: $status, state: $newState")
-
-            when (newState) {
-                BluetoothProfile.STATE_CONNECTED -> {
-                    // use Main thread to discover services
-                    lgd("BluetoothGattCallback: Successfully connected to $deviceAddress")
-                    gatt.discoverServices()
-                }
-                BluetoothProfile.STATE_DISCONNECTED -> {
-                    gatt.close()
-                }
-            }
-        }
-
-        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                lgd("ACTION_GATT_SERVICES_DISCOVERED")
-            } else {
-                lgd("onServicesDiscovered received: $status")
-            }
-        }
-    }
-
-    fun discoverService() {
-        lgd("$tag discover service")
-        val gatt = mBleDevice.connectGatt(
-                context,
-                false,
-                serviceCallback
-        )
-        gatt.connect()
-
-        Handler(Looper.getMainLooper()).postDelayed(
-                {
-                    lgd("$tag Services: ${gatt.services}")
-                },
-                5000)
-    }
-
-    private fun BluetoothGatt.printGattTable() {
-        if (services.isEmpty()) {
-            lgi("printGattTable: No service and characteristic available, " +
-                    "call discoverServices() first?")
-            return
-        }
-        services.forEach { service ->
-            val characteristicsTable =
-                service.characteristics.joinToString(
-                        separator = "\n|--",
-                        prefix = "|--"
-                ) { it.uuid.toString() }
-
-            lgd("printGattTable: \nService ${service.uuid}" +
-                    "\nCharacteristics:\n$characteristicsTable")
-        }
-    }
-
-    // Step 2
-    fun discoverDevice() {
-        val mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
-        if (mBluetoothAdapter.isDiscovering){
-            lgd(tag + "Canceling discovery process...")
-            bluetoothAdapter.cancelDiscovery()
-        }
-
-        lgd(tag + "Start Discovery...")
-        mBluetoothAdapter.startDiscovery()
-    }
-
     private val newHandler = object : Handler() {
         override fun handleMessage(msg: Message) {
             if (msg.what == MESSAGE_READ) {
@@ -230,50 +156,13 @@ class BluetoothHelper @Inject constructor(
         }
     }
 
-    //region Step1: Check Paired List
-    fun checkBondedList(): Boolean {
-        val devices = bluetoothAdapter?.bondedDevices
-        val list = ArrayList<Any>()
-        val hcAddr = mRegex.replace(devAddr, "").toUpperCase()
-
-        if (devices?.size!! > 0) {
-            // Loop through paired devices
-            for (device in devices) {
-                val deviceAddr = mRegex.replace(
-                        device.address, ""
-                ).toUpperCase()
-                lgd("$tag Device address: $deviceAddr   vs   $hcAddr")
-
-                if (deviceAddr == hcAddr) {
-                    lgd("$tag ==========> Found HC05")
-                    mBleDevice = device
-                    return true
-                } else {
-                    lgd("$tag ! Not Found !")
-                }
-            }
-        } else {
-            lgd("$tag Nothing is in the paired list.")
-        }
-        return false
-    }
-    //endregion
-
     @Throws(IOException::class)
     private fun createBluetoothSocket(uuid: UUID): BluetoothSocket? {
         return mBleDevice.createRfcommSocketToServiceRecord(uuid)
         //creates secure outgoing connection with BT device using UUID
     }
 
-    fun getBondState(state: Int): String {
-        return when (state) {
-            BOND_NONE -> "Failed: Bond None!"
-            BOND_BONDED -> "Device Bonded."
-            else -> "Unknown State."
-        }
-    }
-
-    fun switch(signal: String) {
+    fun ledSwitch(signal: String) {
         mConnectedThread?.write(signal)
     }
 
@@ -290,6 +179,7 @@ class BluetoothHelper @Inject constructor(
         override fun run() {
             val buffer = ByteArray(1024) // buffer store for the stream
             var bytes: Int // bytes returned from read()
+
             // Keep listening to the InputStream until an exception occurs
             while (true) {
                 try {
@@ -315,7 +205,7 @@ class BluetoothHelper @Inject constructor(
             try {
                 mmOutStream?.write(bytes)
             } catch (e: IOException) {
-                lge("Error on write: ${e.message}")
+                lge("ConnectedThread: Error on write: ${e.message}")
             }
         }
 
@@ -342,20 +232,14 @@ class BluetoothHelper @Inject constructor(
             mmOutStream = tmpOut
         }
     }
-
+    //endregion
 
     companion object {
         private const val tag = "BlueHelper: "
         private const val MESSAGE_READ = 2
         private const val CONNECTING_STATUS = 3
 
-
-        const val SELECT_DEVICE_REQUEST_CODE = 42
-
         val mRegex = "[^A-Za-z0-9 ]".toRegex()
-
-
-
     }
 
 

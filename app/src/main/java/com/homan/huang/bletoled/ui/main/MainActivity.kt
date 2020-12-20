@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -42,9 +43,10 @@ class MainActivity : AppCompatActivity() {
 
     //region vars:
     private val mainVM: MainViewModel by viewModels()
-    private val fragmentMG = supportFragmentManager
     private val infoTV: TextView by
         lazy { findViewById(R.id.infoTV) }
+    private val counterTV: TextView by
+        lazy { findViewById(R.id.counterTV) }
     private val discoveryTV: TextView by
         lazy { findViewById(R.id.discoverTV) }
     private val progressBar: ProgressBar by
@@ -53,6 +55,12 @@ class MainActivity : AppCompatActivity() {
         lazy { findViewById(R.id.onBT) }
     private val offBT: Button by
         lazy { findViewById(R.id.offBT) }
+    private val tryAgainBT: Button by
+        lazy { findViewById(R.id.tryAgainBT) }
+
+    private var newDevice = false
+    private var counter = 0
+    private var bonded = false
     //endregion
 
     //region contracts:
@@ -64,7 +72,6 @@ class MainActivity : AppCompatActivity() {
             BLUETOOTH_ON -> {
                 msg(this, BLUETOOTH_READY, 1)
                 lgd("$tag Bluetooth Switch is ON. Move to Step 1.")
-                //progressBar.visibility = View.VISIBLE
                 mainVM.checkBondedList()
             }
             BLUETOOTH_OFF -> {
@@ -92,6 +99,7 @@ class MainActivity : AppCompatActivity() {
         // Hide
         progressBar.visibility = View.GONE
         discoveryTV.visibility = View.GONE
+        counterTV.visibility = View.GONE
 
         onBT.visibility = View.GONE
         onBT.setOnClickListener {
@@ -107,6 +115,13 @@ class MainActivity : AppCompatActivity() {
             mainVM.turnOff()
         }
 
+        tryAgainBT.visibility = View.GONE
+        tryAgainBT.setOnClickListener {
+            tryAgainBT.visibility = View.GONE
+            progressBar.visibility = View.VISIBLE
+            mainVM.checkBondedList()
+        }
+
         // check permission + Step 0
         reqMultiplePermissions.launch(REQUIRED_PERMISSIONS)
 
@@ -115,14 +130,14 @@ class MainActivity : AppCompatActivity() {
         lifecycleOwner.lifecycle.addObserver(bleObserver)
 
         /*
-            Step 0: Check Bluetooth Switch
-            Step 1: Check Bonded List.
-                Found: Step 3;
-                Not Found: Step 2
-            Step 2: Discover Device
-                Found: Step 3;
+            Step 1: Check Bluetooth Switch
+            Step 2: Check Bonded List.
+                Found: Step 4;
+                Not Found: Step 3
+            Step 3: Discover Device
+                Found: Step 4;
                 Not Found: Device Not Found
-            Step 3: Bond to Device
+            Step 4: Bond to Device
          */
         mainVM.deviceStatus.observe(
                 this,
@@ -136,18 +151,23 @@ class MainActivity : AppCompatActivity() {
                         PAIRING -> {
                             val info = "Searching Bonded List..."
                             infoTV.text = info
-                            mainVM.checkBondedList()
                             progressBar.visibility = View.VISIBLE
+                            mainVM.checkBondedList()
                         }
                         DISCOVERING -> {
                             val info = "Discovering device in range..."
                             infoTV.text = info
+                            progressBar.visibility = View.VISIBLE
+                            newDevice = true
                             mainVM.discovering()
                         }
                         BONDING -> {
                             val info = "Device Found in Record!\nBonding..."
                             infoTV.text = info
-                            mainVM.bonding()
+                            if (newDevice)
+                                mainVM.checkNewDevice()
+                            else
+                                mainVM.bonding()
                         }
                         DISCOVERED -> {
                             val pass = "Your Pass: ${ConfigHelper.getPass()}"
@@ -156,13 +176,17 @@ class MainActivity : AppCompatActivity() {
                         }
                         BONDED -> {
                             lgd("MainAct: Bonded successful!")
-
+                            counterTV.visibility = View.GONE
+                            counter = 0
+                            bonded = true
                             discoveryTV.text = ""
                             discoveryTV.visibility = View.GONE
+                            progressBar.visibility = View.GONE
 
                             val info = "Bonded to $DEVICE_NAME."
                             infoTV.text = info
                             msg(this, info, 1)
+                            mainVM.connected()
                         }
                         CONNECTED -> {
                             val info = "Device connected..."
@@ -171,14 +195,31 @@ class MainActivity : AppCompatActivity() {
                             progressBar.visibility = View.GONE
                         }
                         FAIL -> {
-                            val info = "FAIL to create connection!"
+                            counter = 0
+                            counterTV.visibility = View.GONE
+                            val info = "FAIL to create connection!" +
+                                    "\nOr\nPassword is incorrect!"
                             infoTV.text = info
+                            discoveryTV.visibility = View.GONE
                             progressBar.visibility = View.GONE
+                            tryAgainBT.visibility = View.VISIBLE
                         }
                         NOT_FOUND -> {
+                            lgd("MainAct: Device Not Found.")
+                            progressBar.visibility = View.GONE
                             val info = "Device NOT Found!"
+                            infoTV.setTextColor(Color.RED)
                             infoTV.text = info
                             msg(this, info, 1)
+                        }
+                        COUNT_DOWN -> {
+                            if (!bonded) {
+                                counterTV.visibility = View.VISIBLE
+                                val down = 35 - counter
+                                counter++
+                                val timer = "35s to Enter Password: $down"
+                                counterTV.text = timer
+                            }
                         }
                         else -> {
                             val info = "Illegal Process Error..."

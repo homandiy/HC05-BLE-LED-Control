@@ -15,12 +15,8 @@ import javax.inject.Singleton
 
 // provide Application context
 @InstallIn(ApplicationComponent::class)
-
-// provide Activity context
-//@InstallIn(ActivityComponent::class)
 @Module
 class BleModule {
-
     @Provides
     fun provideAddress(): String = ConfigHelper.getAddress()
 
@@ -42,8 +38,4 @@ class BleModule {
         address: String,
         bleStatus: MutableLiveData<DeviceStatus>
     ): BleHc05Observer = BleHc05Observer(context, address, bleStatus)
-
-
-
-
 }

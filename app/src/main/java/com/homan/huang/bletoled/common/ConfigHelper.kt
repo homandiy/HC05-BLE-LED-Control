@@ -14,4 +14,6 @@ const val BLUETOOTH_READY = "Bluetooth is ready."
 const val BLUETOOTH_NOT_ON = "Bye, Bluetooth is OFF!"
 const val DEVICE_NAME = "LED Control"
 
+const val SEC = 1000L
+
 

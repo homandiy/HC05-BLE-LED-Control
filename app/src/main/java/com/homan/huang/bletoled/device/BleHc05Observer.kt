@@ -16,7 +16,7 @@ import com.homan.huang.bletoled.common.lgd
 import com.homan.huang.bletoled.common.lge
 import com.homan.huang.bletoled.device.DeviceStatus.*
 
-    class BleHc05Observer(
+class BleHc05Observer(
         private val context: Context,
         devAddr: String,
         devStatus: MutableLiveData<DeviceStatus>
@@ -45,7 +45,8 @@ import com.homan.huang.bletoled.device.DeviceStatus.*
 
                         lgd("$tag Device Found!")
                         mBleDevice.createBond()
-                        lgd("$tag Device Bonded.")
+
+                        lgd("$tag Device Bond state: ${mBleDevice.bondState}")
 
                     } else {
                         lgd("$tag Device NOT Found!")
@@ -83,13 +84,16 @@ import com.homan.huang.bletoled.device.DeviceStatus.*
 
                     when (device.bondState) {
                         BOND_BONDED -> {
+                            lgd("$tag Bonded to device")
                             devStatus.postValue(BONDED)
                         }
                         BOND_BONDING -> {
                             lgd("$tag Bonding to device")
+                            devStatus.postValue(BONDING)
                         }
                         BOND_NONE -> {
-                            lgd("$tag Nothing has bonded.")
+                            lge("$tag Nothing has bonded.")
+                            devStatus.postValue(FAIL)
                         }
                     }
 
@@ -98,8 +102,6 @@ import com.homan.huang.bletoled.device.DeviceStatus.*
         }
     }
     //endregion
-
-
 
     //region Bluetooth Connection
     private val connectionFilter = IntentFilter()
@@ -116,7 +118,6 @@ import com.homan.huang.bletoled.device.DeviceStatus.*
         }
     }
     //endregion
-
 
     //region Lifecycle Event
     @OnLifecycleEvent(ON_CREATE)
