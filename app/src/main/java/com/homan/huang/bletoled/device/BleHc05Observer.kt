@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Parcelable
 import androidx.lifecycle.Lifecycle.Event.*
 import androidx.lifecycle.LifecycleObserver
@@ -96,7 +97,6 @@ class BleHc05Observer(
                             devStatus.postValue(FAIL)
                         }
                     }
-
                 }
             }
         }
@@ -109,10 +109,10 @@ class BleHc05Observer(
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 ACTION_ACL_CONNECTED -> {
-                    lgd(tag + "Connect! Please continue.")
+                    lgd(tag + "ACL:  Connected!")
                 }
                 ACTION_ACL_DISCONNECTED -> {
-                    lge(tag + "Disconnect.")
+                    lge(tag + "ACL:  Disconnected.")
                 }
             }
         }
@@ -122,7 +122,7 @@ class BleHc05Observer(
     //region Lifecycle Event
     @OnLifecycleEvent(ON_CREATE)
     fun onCreate() {
-        lgd(tag + "Register broadcast receivers...")
+        lgd("$tag Register broadcast receivers...")
         bleFilter.addAction(ACTION_FOUND)
         bleFilter.addAction(ACTION_DISCOVERY_STARTED)
         bleFilter.addAction(ACTION_DISCOVERY_FINISHED)
@@ -136,20 +136,51 @@ class BleHc05Observer(
 
     @OnLifecycleEvent(ON_RESUME)
     fun onResume() {
-        context.registerReceiver(bleReceiver, bleFilter)
-        context.registerReceiver(connectionReceiver, connectionFilter)
+        try {
+            lgd("$tag ==> Registered bleReceiver.")
+            context.registerReceiver(bleReceiver, bleFilter)
+        } catch (e: IllegalArgumentException) {
+            lge("$tag bleReceiver has registered. Err: ${e.message}")
+        }
+
+        try {
+            lgd("$tag ==> Registered connectionReceiver.")
+            context.registerReceiver(connectionReceiver, connectionFilter)
+        } catch (e: IllegalArgumentException) {
+            lge("$tag connectionReceiver has registered. Err: ${e.message}")
+        }
     }
 
     @OnLifecycleEvent(ON_PAUSE)
     fun onPause() {
-        context.unregisterReceiver(bleReceiver)
-        context.unregisterReceiver(connectionReceiver)
+        try {
+            lgd("$tag ==> unRegistered bleReceiver.")
+            context.unregisterReceiver(bleReceiver)
+        } catch (e: java.lang.IllegalArgumentException) {
+            lge("$tag bleReceiver has unregistered. Err: ${e.message}")
+        }
+        try {
+            lgd("$tag ==> unRegistered connectionReceiver.")
+            context.unregisterReceiver(connectionReceiver)
+        } catch (e: IllegalArgumentException) {
+            lge("$tag connectionReceiver has unregistered. Err: ${e.message}")
+        }
     }
 
     @OnLifecycleEvent(ON_DESTROY)
     fun onDestroy() {
-        context.unregisterReceiver(bleReceiver)
-        context.unregisterReceiver(connectionReceiver)
+        try {
+            lgd("$tag ==> unRegistered bleReceiver.")
+            context.unregisterReceiver(bleReceiver)
+        } catch (e: java.lang.IllegalArgumentException) {
+            lge("$tag bleReceiver has unregistered. Err: ${e.message}")
+        }
+        try {
+            lgd("$tag ==> unRegistered connectionReceiver.")
+            context.unregisterReceiver(connectionReceiver)
+        } catch (e: IllegalArgumentException) {
+            lge("$tag connectionReceiver has unregistered. Err: ${e.message}")
+        }
     }
     //endregion
 
@@ -157,3 +188,4 @@ class BleHc05Observer(
         private const val tag = "BleObserver: "
     }
 }
+

@@ -84,7 +84,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
-        android:text="TextView"
+        android:text="Countdown"
         android:textColor="@color/teal_700"
         android:textSize="18sp"
         app:layout_constraintEnd_toEndOf="parent"

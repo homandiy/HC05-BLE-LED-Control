@@ -4,16 +4,16 @@ import androidx.hilt.lifecycle.ViewModelInject
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.homan.huang.bletoled.common.SEC
-import com.homan.huang.bletoled.common.lgd
+import com.homan.huang.bletoled.common.*
 import com.homan.huang.bletoled.device.BluetoothHelper
 import com.homan.huang.bletoled.device.DeviceStatus
 import com.homan.huang.bletoled.device.DeviceStatus.*
-import kotlinx.coroutines.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 
 class MainViewModel @ViewModelInject constructor(
-        val bleHelper: BluetoothHelper,
+        private val bleHelper: BluetoothHelper,
         val deviceStatus: MutableLiveData<DeviceStatus>
 ) : ViewModel()  {
     private val tag = "MainVM:"
@@ -29,14 +29,15 @@ class MainViewModel @ViewModelInject constructor(
     }
 
     fun bonding() {
-        val result = bleHelper.checkDeviceBonding()
-        lgd("$tag Bonding...$result")
+        viewModelScope.launch {
+            val result = bleHelper.checkDeviceBonding()
+            lgd("$tag Bonding...$result")
 
-        if (result) {
-            deviceStatus.postValue(CONNECTED)
-            //bleHelper.discoverService()
-        } else {
-            deviceStatus.postValue(FAIL)
+            if (result) {
+                deviceStatus.postValue(CONNECTED)
+            } else {
+                deviceStatus.postValue(FAIL)
+            }
         }
     }
 
@@ -56,11 +57,45 @@ class MainViewModel @ViewModelInject constructor(
     }
 
     fun turnOn() {
-        bleHelper.ledSwitch("101")
+        viewModelScope.launch {
+            if (bleHelper.bleMsg != ERR_BROKEN_PIPE) {
+                var bleMsg = ""
+                for (i in 1..3) {
+                    bleMsg = bleHelper.ledSwitch(UUID_LED_ON)
+                    lgd("$tag Retry $i; received Bluetooth message: $bleMsg")
+                    if (bleMsg.contains(ON)) break
+                }
+                if (bleMsg.contains(ON)) {
+                    deviceStatus.postValue(LED_ON)
+                } else {
+                    deviceStatus.postValue(LED_FAIL_ON)
+                }
+            } else {
+                lgd("Call Restart!")
+                deviceStatus.postValue(RESTART)
+            }
+        }
     }
 
     fun turnOff() {
-        bleHelper.ledSwitch("011")
+        viewModelScope.launch {
+            if (bleHelper.bleMsg != ERR_BROKEN_PIPE) {
+                var bleMsg = ""
+                for (i in 1..3) {
+                    bleMsg = bleHelper.ledSwitch(UUID_LED_OFF)
+                    lgd("$tag Retry $i; received Bluetooth message: $bleMsg")
+                    if (bleMsg.contains(OFF)) break
+                }
+                if (bleMsg.contains(OFF)) {
+                    deviceStatus.postValue(LED_OFF)
+                } else {
+                    deviceStatus.postValue(LED_FAIL_OFF)
+                }
+            } else {
+                lgd("Call Restart!")
+                deviceStatus.postValue(RESTART)
+            }
+        }
     }
 
     fun checkNewDevice() {
@@ -79,6 +114,11 @@ class MainViewModel @ViewModelInject constructor(
 
     fun connected() {
         deviceStatus.postValue(CONNECTED)
+    }
+
+    companion object {
+        private const val ON = "ON"
+        private const val OFF = "OFF"
     }
 }
 

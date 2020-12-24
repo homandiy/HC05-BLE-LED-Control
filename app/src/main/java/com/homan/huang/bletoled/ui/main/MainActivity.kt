@@ -1,10 +1,8 @@
 package com.homan.huang.bletoled.ui.main
 
 import android.Manifest
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
@@ -14,13 +12,13 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.LifecycleOwner
 import com.homan.huang.bletoled.R
 import com.homan.huang.bletoled.common.*
 import com.homan.huang.bletoled.device.BleHc05Observer
 import com.homan.huang.bletoled.device.DeviceStatus.*
+import com.homan.huang.bletoled.device.DeviceStatus.LED_OFF
+import com.homan.huang.bletoled.device.DeviceStatus.LED_ON
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -103,15 +101,11 @@ class MainActivity : AppCompatActivity() {
 
         onBT.visibility = View.GONE
         onBT.setOnClickListener {
-            offBT.visibility = View.VISIBLE
-            onBT.visibility = View.GONE
             mainVM.turnOn()
         }
 
         offBT.visibility = View.GONE
         offBT.setOnClickListener {
-            offBT.visibility = View.GONE
-            onBT.visibility = View.VISIBLE
             mainVM.turnOff()
         }
 
@@ -194,6 +188,13 @@ class MainActivity : AppCompatActivity() {
                             onBT.visibility = View.VISIBLE
                             progressBar.visibility = View.GONE
                         }
+                        DISCONNECTED -> {
+                            val info = "Device Not Found!"
+                            infoTV.text = info
+                            onBT.visibility = View.GONE
+                            tryAgainBT.visibility = View.VISIBLE
+                            progressBar.visibility = View.GONE
+                        }
                         FAIL -> {
                             counter = 0
                             counterTV.visibility = View.GONE
@@ -220,6 +221,47 @@ class MainActivity : AppCompatActivity() {
                                 val timer = "35s to Enter Password: $down"
                                 counterTV.text = timer
                             }
+                        }
+                        LED_ON -> {
+                            offBT.visibility = View.VISIBLE
+                            onBT.visibility = View.GONE
+                            val info = "LED is ON."
+                            infoTV.setTextColor(Color.BLUE)
+                            infoTV.text = info
+                        }
+                        LED_FAIL_ON -> {
+                            val info = "LED: Fail to turn ON!\n" +
+                                    "Please check your distance!"
+                            infoTV.setTextColor(Color.DKGRAY)
+                            infoTV.text = info
+                        }
+                        LED_OFF -> {
+                            offBT.visibility = View.GONE
+                            onBT.visibility = View.VISIBLE
+                            val info = "LED is OFF."
+                            infoTV.setTextColor(Color.BLACK)
+                            infoTV.text = info
+                        }
+                        LED_FAIL_OFF -> {
+                            val info = "LED: Fail to turn OFF!\n" +
+                                    "Please check your distance!"
+                            infoTV.setTextColor(Color.DKGRAY)
+                            infoTV.text = info
+                        }
+                        RESTART -> {
+                            lgd("MainAct: Restart the App")
+                            val info = "Broken Connection\n" +
+                                    "Restarting the App!"
+                            infoTV.setTextColor(Color.RED)
+                            infoTV.text = info
+                            progressBar.visibility = View.VISIBLE
+
+                            val packageManager: PackageManager = this.packageManager
+                            val intent = packageManager.getLaunchIntentForPackage(this.packageName)
+                            val componentName = intent!!.component
+                            val mainIntent = Intent.makeRestartActivityTask(componentName)
+                            this.startActivity(mainIntent)
+                            Runtime.getRuntime().exit(0)
                         }
                         else -> {
                             val info = "Illegal Process Error..."

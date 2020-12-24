@@ -1,78 +1,47 @@
-package com.homan.huang.bletoled.device
+    package com.homan.huang.bletoled.device
 
 import android.annotation.SuppressLint
-import android.bluetooth.*
-import android.bluetooth.BluetoothDevice.*
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.os.Handler
-import android.os.Looper
 import android.os.Message
-import android.os.SystemClock
+import com.homan.huang.bletoled.common.ERR_BROKEN_PIPE
 import com.homan.huang.bletoled.common.lgd
 import com.homan.huang.bletoled.common.lge
-import com.homan.huang.bletoled.common.lgi
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.UnsupportedEncodingException
-import java.nio.charset.StandardCharsets
+import java.lang.Thread.State
 import java.util.*
 import javax.inject.Inject
 import kotlin.collections.ArrayList
 
 
-@SuppressLint("HandlerLeak")
+    @SuppressLint("HandlerLeak")
 class BluetoothHelper @Inject constructor(
-        private val context: Context,
-        private val devAddr: String
-) {
+            private val context: Context,
+            private val devAddr: String
+    ) {
     private var bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
     private lateinit var serviceUuid: UUID
-    private lateinit var charUuid: UUID
     private lateinit var mBleDevice: BluetoothDevice
+    var bleMsg = ""
     private var mBTSocket: BluetoothSocket? = null
     private var mHandler: Handler? = null
     private var mConnectedThread: ConnectedThread? = null
+    // check connection
+    private var connected = false
 
     // check bluetooth switch
     fun isSwitchOn(): Boolean {
         return !bluetoothAdapter.isEnabled
     }
 
-
-    // Step 4
-    fun checkDeviceBonding(): Boolean {
-        val uuids = mBleDevice.uuids
-        serviceUuid = uuids[0].uuid
-        charUuid = uuids[1].uuid
-
-        // handler:
-        if (mHandler == null) mHandler = newHandler
-        bondThread.start()
-
-        lgd("$tag Service UUID: $serviceUuid")
-        lgd("$tag Characteristic UUID: $charUuid")
-
-
-
-        return true
-    }
-    //endregion
-
-    // Step 3
-    fun discoverDevice() {
-        val mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
-        if (mBluetoothAdapter.isDiscovering){
-            lgd(tag + "Canceling discovery process...")
-            bluetoothAdapter.cancelDiscovery()
-        }
-
-        lgd(tag + "Start Discovery...")
-        mBluetoothAdapter.startDiscovery()
-    }
-
-    //region Step 2: Check Paired List
+    // Step 2: Check Paired List
     fun checkBondedList(): Boolean {
         val devices = bluetoothAdapter?.bondedDevices
         val list = ArrayList<Any>()
@@ -101,7 +70,37 @@ class BluetoothHelper @Inject constructor(
         }
         return false
     }
-    //endregion
+
+    // Step 3
+    fun discoverDevice() {
+        val mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+        if (mBluetoothAdapter.isDiscovering){
+            lgd(tag + "Canceling discovery process...")
+            bluetoothAdapter.cancelDiscovery()
+        }
+
+        lgd(tag + "Start Discovery...")
+        mBluetoothAdapter.startDiscovery()
+    }
+
+    // Step 4
+    suspend fun checkDeviceBonding(): Boolean {
+        mBleDevice.createBond()
+        val uuids = mBleDevice.uuids
+        serviceUuid = uuids[0].uuid
+        lgd("$tag Service UUID: $serviceUuid")
+
+        // handler:
+        if (mHandler == null) mHandler = newHandler
+
+        // start bond thread
+        if (bondThread.state == State.NEW) bondThread.start()
+
+        // communication delay
+        delay(COM_DELAY)
+        lgd("$tag connected? $connected")
+        return connected
+    }
 
     //region network thread with Bluetooth
     private val bondThread = object : Thread() {
@@ -120,6 +119,7 @@ class BluetoothHelper @Inject constructor(
                 try {
                     fail = true
                     mBTSocket?.close()
+                    //                                             fail
                     mHandler?.obtainMessage(CONNECTING_STATUS, -1, -1)
                             ?.sendToTarget()
                 } catch (e2: IOException) {
@@ -127,31 +127,45 @@ class BluetoothHelper @Inject constructor(
                     lge("Socket creation failed")
                 }
             }
+
+            // socket not fail
             if (!fail) {
+                connected = true
                 mConnectedThread = mBTSocket?.let { ConnectedThread(it) }
-                mConnectedThread?.setHandler(mHandler!!)
-                mConnectedThread?.start()
+                mConnectedThread?.setHandler(mHandler!!) // provide Handler
+                if (mConnectedThread?.state == State.NEW) mConnectedThread?.start()
+                //                                         connect
                 mHandler?.obtainMessage(CONNECTING_STATUS, 1, -1, name)
-                        ?.sendToTarget()
+                        ?.sendToTarget() // send message
             }
         }
     }
 
     private val newHandler = object : Handler() {
         override fun handleMessage(msg: Message) {
-            if (msg.what == MESSAGE_READ) {
-                var readMessage: String? = null
-                try {
-                    readMessage = String((msg.obj as ByteArray), StandardCharsets.UTF_8)
-                } catch (e: UnsupportedEncodingException) {
-                    e.printStackTrace()
+            lgd("Handler: what = ${msg.what}")
+            when (msg.what) {
+                MESSAGE_READ -> {
+                    try {
+                        val readBuffer = msg.obj as ByteArray
+                        bleMsg += String(readBuffer, 0, msg.arg1)
+                    } catch (e: UnsupportedEncodingException) {
+                        e.printStackTrace()
+                    }
                 }
-            }
-            if (msg.what == CONNECTING_STATUS) {
-                if (msg.arg1 == 1)
-                    lgd("Connected to Device: " + msg.obj as String)
-                else
-                    lge("Connection Failed")
+                CONNECTING_STATUS -> {
+                    lgd("msg = CONNECTION STATUS")
+                    connected = if (msg.arg1 == CONNECTED) {
+                        lgd("Connected to Device: " + msg.obj as String)
+                        true
+                    } else {
+                        lge("Connection Failed")
+                        false
+                    }
+                }
+                BROKEN_PIPE -> {
+                    bleMsg = ERR_BROKEN_PIPE
+                }
             }
         }
     }
@@ -159,42 +173,46 @@ class BluetoothHelper @Inject constructor(
     @Throws(IOException::class)
     private fun createBluetoothSocket(uuid: UUID): BluetoothSocket? {
         return mBleDevice.createRfcommSocketToServiceRecord(uuid)
-        //creates secure outgoing connection with BT device using UUID
     }
 
-    fun ledSwitch(signal: String) {
+
+    suspend fun ledSwitch(signal: String): String {
+        bleMsg = ""
         mConnectedThread?.write(signal)
+        delay(1000)
+        return bleMsg
     }
 
     /*
         Thread holds connection
      */
-    private class ConnectedThread(private val mmSocket: BluetoothSocket) : Thread() {
-        private val mmInStream: InputStream?
-        private val mmOutStream: OutputStream?
+    private class ConnectedThread(socket: BluetoothSocket) : Thread() {
+        private var mmSocket: BluetoothSocket = socket
+        private var mmInStream: InputStream? = mmSocket.inputStream
+        private var mmOutStream: OutputStream? = mmSocket.outputStream
         private lateinit var mHandler: Handler
 
         fun setHandler(handler: Handler) { mHandler = handler }
 
         override fun run() {
             val buffer = ByteArray(1024) // buffer store for the stream
-            var bytes: Int // bytes returned from read()
+            var bytes = 0 // bytes returned from read()
 
             // Keep listening to the InputStream until an exception occurs
             while (true) {
-                try {
-                    // Read from the InputStream
-                    bytes = mmInStream!!.available()
-                    if (bytes != 0) {
-                        SystemClock.sleep(100) //pause and wait for rest of data. Adjust this depending on your sending speed.
-                        bytes = mmInStream.available() // how many bytes are ready to be read?
-                        bytes = mmInStream.read(buffer, 0, bytes) // record how many bytes we actually read
+                if (mmInStream != null) {
+                    try {
+                        // Read from the InputStream
+                        bytes = mmInStream!!.read(buffer)
+                        lgd("+++++ ConnectedThread: bytes size = $bytes")
                         mHandler.obtainMessage(MESSAGE_READ, bytes, -1, buffer)
-                                .sendToTarget() // Send the obtained bytes to the UI activity
+                                .sendToTarget()
+                    } catch (e: IOException) {
+                        lge("+++++ ConnectedThread: Error on read: ${e.message}")
+                        mHandler.obtainMessage(BROKEN_PIPE, -1, -1)
+                                .sendToTarget()
+                        break
                     }
-                } catch (e: IOException) {
-                    e.printStackTrace()
-                    break
                 }
             }
         }
@@ -205,47 +223,34 @@ class BluetoothHelper @Inject constructor(
             try {
                 mmOutStream?.write(bytes)
             } catch (e: IOException) {
-                lge("ConnectedThread: Error on write: ${e.message}")
+                lge("+++++ ConnectedThread: Error on write: ${e.message}")
+                mHandler.obtainMessage(BROKEN_PIPE, -1, -1)
+                        .sendToTarget()
             }
         }
 
         /* Call this from the main activity to shutdown the connection */
         fun cancel() {
             try {
+                mmInStream?.close()
+                mmOutStream?.close()
                 mmSocket.close()
             } catch (e: IOException) {
             }
-        }
-
-        init {
-            var tmpIn: InputStream? = null
-            var tmpOut: OutputStream? = null
-
-            // Get the input and output streams, using temp objects because
-            // member streams are final
-            try {
-                tmpIn = mmSocket.inputStream
-                tmpOut = mmSocket.outputStream
-            } catch (e: IOException) {
-            }
-            mmInStream = tmpIn
-            mmOutStream = tmpOut
         }
     }
     //endregion
 
     companion object {
         private const val tag = "BlueHelper: "
-        private const val MESSAGE_READ = 2
+        private const val MESSAGE_READ = 4
         private const val CONNECTING_STATUS = 3
+        private const val BROKEN_PIPE = 5
+
+        private const val CONNECTED = 1
+        private const val COM_DELAY = 3000L
 
         val mRegex = "[^A-Za-z0-9 ]".toRegex()
     }
 
-
 }
-
-data class BluetoothResult(
-        val uuid: UUID,
-        val value: ByteArray?,
-        val status: Int)
