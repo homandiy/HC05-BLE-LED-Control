@@ -33,7 +33,8 @@ class BleHc05Observer(
     private val bleFilter = IntentFilter()
     private var devfound = false
     private lateinit var mBleDevice: BluetoothDevice
-    private val bleReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+
+    private val bleReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
 
             when (intent.action) {
@@ -47,7 +48,8 @@ class BleHc05Observer(
                         lgd("$tag Device Found!")
                         mBleDevice.createBond()
 
-                        lgd("$tag Device Bond state: ${mBleDevice.bondState}")
+                        lgd("$tag Device Bond state:" +
+                                " ${mBleDevice.bondState}")
 
                     } else {
                         lgd("$tag Device NOT Found!")
@@ -63,12 +65,14 @@ class BleHc05Observer(
                                     EXTRA_DEVICE
                             ) as BluetoothDevice?
 
-                    lgd(tag + "Found: ${device!!.name} at ${device.address}")
+                    lgd(tag + "Found: ${device!!.name} at" +
+                            " ${device.address}")
                     val mAddress = mRegex.replace(
                             device.address, "").toUpperCase()
 
                     // show address
-                    lgd("$tag===> H05 -- $hc05Address   ::  Adv -- $mAddress")
+                    lgd("$tag===> H05 -- $hc05Address   ::" +
+                            "  Adv -- $mAddress")
                     if (mAddress == hc05Address) {
                         lgd("$tag!!!   IcU :-) Found device   !!!")
                         devfound = true

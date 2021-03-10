@@ -183,9 +183,7 @@ class BluetoothHelper @Inject constructor(
         return bleMsg
     }
 
-    /*
-        Thread holds connection
-     */
+    /* Thread holds connection */
     private class ConnectedThread(socket: BluetoothSocket) : Thread() {
         private var mmSocket: BluetoothSocket = socket
         private var mmInStream: InputStream? = mmSocket.inputStream
@@ -217,7 +215,7 @@ class BluetoothHelper @Inject constructor(
             }
         }
 
-        /* Call this from the main activity to send data to the remote device */
+        /* Send data to the remote device */
         fun write(input: String) {
             val bytes = input.toByteArray() //converts entered String into bytes
             try {
@@ -229,7 +227,7 @@ class BluetoothHelper @Inject constructor(
             }
         }
 
-        /* Call this from the main activity to shutdown the connection */
+        /* Shutdown the connection */
         fun cancel() {
             try {
                 mmInStream?.close()
